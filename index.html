@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AeroMetric — Flight Simulator Fuel Efficiency Visualizer</title>
+
+  <!-- Google Fonts: Inter for UI and JetBrains Mono for flight telemetry -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            cockpit: {
+              950: '#070b14',
+              900: '#0d1424',
+              800: '#152038',
+              700: '#1e2d4d',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- D3.js v7 CDN for interactive data visualizations -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+
+  <style>
+    /* Custom subtle range slider styling for crisp cockpit feel */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 9999px;
+      background: #1e2d4d;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: #38bdf8;
+      border: 2px solid #0d1424;
+      margin-top: -6px;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background: #7dd3fc;
+    }
+    input[type="range"]::-moz-range-track {
+      height: 6px;
+      border-radius: 9999px;
+      background: #1e2d4d;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: #38bdf8;
+      border: 2px solid #0d1424;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+    }
+  </style>
+</head>
+<body class="bg-cockpit-950 text-slate-100 font-sans antialiased min-h-screen overflow-x-hidden selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- Top Navigation / Telemetry Header -->
+  <header class="sticky top-0 z-30 bg-cockpit-950/90 backdrop-blur-md border-b border-slate-800/80">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <!-- Inline SVG Aircraft Telemetry Emblem -->
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500/20 to-indigo-500/20 border border-sky-400/30 flex items-center justify-center shadow-lg shadow-sky-950/40">
+          <svg class="w-6 h-6 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            AeroMetric Sim
+            <span class="text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">FUEL MODEL v1.2</span>
+          </h1>
+          <p class="text-xs text-slate-400">Interactive Flight Simulator Fuel Efficiency &amp; Penalty Visualizer</p>
+        </div>
+      </div>
+
+      <!-- Quick Scenario Presets -->
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs text-slate-400 hidden md:inline mr-1">Presets:</span>
+        <button data-preset="regional" class="preset-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-cockpit-800 hover:bg-cockpit-700 border border-slate-700/80 text-slate-200 transition active:scale-95">
+          Regional Hop
+        </button>
+        <button data-preset="transcon" class="preset-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-cockpit-800 hover:bg-cockpit-700 border border-slate-700/80 text-slate-200 transition active:scale-95">
+          Transcontinental
+        </button>
+        <button data-preset="heavy" class="preset-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-cockpit-800 hover:bg-cockpit-700 border border-slate-700/80 text-slate-200 transition active:scale-95">
+          Heavy Long-Haul
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Inline Notification Toast (replaces alert/confirm) -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 pointer-events-none flex flex-col gap-2"></div>
+
+  <!-- Main Workspace -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Top Row: Controls Panel + Primary KPI Cards & Curve Chart -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Left Column: Flight Parameters Control Deck -->
+      <section class="lg:col-span-4 bg-cockpit-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">Flight Parameters</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Adjust inputs to observe efficiency impact</p>
+          </div>
+          <button id="btn-reset" class="text-xs font-medium text-sky-400 hover:text-sky-300 px-2.5 py-1 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 transition">
+            Reset
+          </button>
+        </div>
+
+        <!-- Airliner Type Selector (Boeing vs Airbus) -->
+        <div class="space-y-2">
+          <label class="text-xs font-medium text-slate-300 flex items-center justify-between">
+            <span>Airliner Type</span>
+            <span id="airliner-spec-label" class="font-mono text-[11px] text-sky-400">B787-Class Profile</span>
+          </label>
+          <div class="grid grid-cols-2 gap-2.5 p-1 bg-cockpit-950 rounded-xl border border-slate-800">
+            <button id="btn-boeing" type="button" class="airliner-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-sm">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+              Boeing
+            </button>
+            <button id="btn-airbus" type="button" class="airliner-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200 border border-transparent">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              Airbus
+            </button>
+          </div>
+          <p id="airliner-note" class="text-[11px] text-slate-400 leading-relaxed">
+            Boeing profile: Slightly higher base efficiency at light loads, moderately higher weight sensitivity.
+          </p>
+        </div>
+
+        <!-- Total Weight Input -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="input-weight" class="text-xs font-medium text-slate-300">Total Weight</label>
+            <div class="flex items-baseline gap-1 font-mono">
+              <span id="val-weight" class="text-sm font-bold text-white">120</span>
+              <span class="text-xs text-slate-400">metric tons</span>
+            </div>
+          </div>
+          <input id="input-weight" type="range" min="45" max="260" step="1" value="120" class="w-full" />
+          <div class="flex justify-between text-[11px] font-mono text-slate-500">
+            <span>45 t (Light)</span>
+            <span>150 t</span>
+            <span>260 t (MTOW)</span>
+          </div>
+        </div>
+
+        <!-- Distance Input -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="input-distance" class="text-xs font-medium text-slate-300">Flight Distance</label>
+            <div class="flex items-baseline gap-1 font-mono">
+              <span id="val-distance" class="text-sm font-bold text-white">1,800</span>
+              <span class="text-xs text-slate-400">NM</span>
+            </div>
+          </div>
+          <input id="input-distance" type="range" min="200" max="6000" step="50" value="1800" class="w-full" />
+          <div class="flex justify-between text-[11px] font-mono text-slate-500">
+            <span>200 NM</span>
+            <span>3,000 NM</span>
+            <span>6,000 NM</span>
+          </div>
+        </div>
+
+        <!-- Altitude Input -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="input-altitude" class="text-xs font-medium text-slate-300">Cruise Altitude</label>
+            <div class="flex items-baseline gap-1 font-mono">
+              <span id="val-altitude" class="text-sm font-bold text-white">28,000</span>
+              <span class="text-xs text-slate-400">ft</span>
+            </div>
+          </div>
+          <input id="input-altitude" type="range" min="10000" max="43000" step="500" value="28000" class="w-full" />
+          <div class="flex justify-between text-[11px] font-mono text-slate-500">
+            <span>FL100 (10k ft)</span>
+            <span>FL260</span>
+            <span>FL430 (43k ft)</span>
+          </div>
+        </div>
+
+        <!-- Model Assumptions Callout -->
+        <div class="p-3.5 rounded-xl bg-cockpit-950/80 border border-slate-800/90 space-y-1.5">
+          <div class="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>Active Simulation Model</span>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            In this simulator, <span class="text-slate-200 font-medium">higher weight</span>, <span class="text-slate-200 font-medium">longer distance</span>, and <span class="text-slate-200 font-medium">higher altitude</span> each apply cumulative efficiency penalties, lowering specific range (NM/t) and raising fuel burn.
+          </p>
+        </div>
+
+        <!-- Pin Scenario Action -->
+        <button id="btn-pin" type="button" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white font-semibold text-sm shadow-lg shadow-sky-950/50 transition active:scale-[0.98] flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Pin Scenario to Comparison Log
+        </button>
+      </section>
+
+      <!-- Right Column: KPI Readouts + Interactive Sensitivity Curve -->
+      <section class="lg:col-span-8 space-y-6">
+
+        <!-- KPI Telemetry Strip -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          <!-- KPI 1: Efficiency Index -->
+          <div class="bg-cockpit-900/90 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between">
+            <div class="flex items-center justify-between gap-1">
+              <span class="text-xs font-medium text-slate-400">Efficiency Score</span>
+              <span id="kpi-badge" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">GOOD</span>
+            </div>
+            <div class="mt-2 flex items-baseline gap-1 font-mono">
+              <span id="kpi-score" class="text-2xl sm:text-3xl font-bold text-white">72.4</span>
+              <span class="text-xs text-slate-400">/ 100</span>
+            </div>
+            <div class="mt-2.5 w-full h-1.5 bg-cockpit-950 rounded-full overflow-hidden">
+              <div id="kpi-score-bar" class="h-full bg-emerald-400 rounded-full transition-all duration-300" style="width: 72%;"></div>
+            </div>
+          </div>
+
+          <!-- KPI 2: Specific Range -->
+          <div class="bg-cockpit-900/90 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between">
+            <span class="text-xs font-medium text-slate-400">Fuel Efficiency</span>
+            <div class="mt-2 flex items-baseline gap-1 font-mono">
+              <span id="kpi-range" class="text-2xl sm:text-3xl font-bold text-sky-300">145.2</span>
+              <span class="text-xs text-slate-400">NM/t</span>
+            </div>
+            <p class="mt-2 text-[11px] text-slate-400">Nautical miles per ton</p>
+          </div>
+
+          <!-- KPI 3: Fuel Burn Rate -->
+          <div class="bg-cockpit-900/90 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between">
+            <span class="text-xs font-medium text-slate-400">Burn Rate</span>
+            <div class="mt-2 flex items-baseline gap-1 font-mono">
+              <span id="kpi-burn-rate" class="text-2xl sm:text-3xl font-bold text-amber-300">6.89</span>
+              <span class="text-xs text-slate-400">kg/NM</span>
+            </div>
+            <p class="mt-2 text-[11px] text-slate-400">Average cruise burn</p>
+          </div>
+
+          <!-- KPI 4: Total Fuel & CO2 -->
+          <div class="bg-cockpit-900/90 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between">
+            <span class="text-xs font-medium text-slate-400">Total Fuel</span>
+            <div class="mt-2 flex items-baseline gap-1 font-mono">
+              <span id="kpi-total-fuel" class="text-2xl sm:text-3xl font-bold text-rose-300">12.4</span>
+              <span class="text-xs text-slate-400">tons</span>
+            </div>
+            <p class="mt-2 text-[11px] text-slate-400 font-mono">CO₂: <span id="kpi-co2" class="text-slate-300">39.2 t</span></p>
+          </div>
+        </div>
+
+        <!-- Chart 1: Multi-Airliner Efficiency Sensitivity Curve -->
+        <div class="bg-cockpit-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-sm font-semibold text-white">Efficiency Sensitivity Curve (Boeing vs. Airbus)</h3>
+              <p id="curve-subtitle" class="text-xs text-slate-400 mt-0.5">
+                How fuel efficiency declines as Total Weight increases (holding distance &amp; altitude constant)
+              </p>
+            </div>
+            <!-- X-Axis Variable Switcher -->
+            <div class="inline-flex bg-cockpit-950 p-1 rounded-xl border border-slate-800">
+              <button data-axis="weight" class="axis-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-500/20 text-sky-300 transition">
+                vs. Weight
+              </button>
+              <button data-axis="distance" class="axis-btn px-3 py-1.5 text-xs font-medium rounded-lg text-slate-400 hover:text-slate-200 transition">
+                vs. Distance
+              </button>
+              <button data-axis="altitude" class="axis-btn px-3 py-1.5 text-xs font-medium rounded-lg text-slate-400 hover:text-slate-200 transition">
+                vs. Altitude
+              </button>
+            </div>
+          </div>
+
+          <!-- Legend -->
+          <div class="flex flex-wrap items-center gap-4 text-xs text-slate-300 mb-3">
+            <div class="flex items-center gap-1.5">
+              <span class="w-4 h-0.5 bg-sky-400 inline-block rounded"></span>
+              <span>Boeing</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-4 h-0.5 bg-emerald-400 inline-block rounded"></span>
+              <span>Airbus</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400 border border-white inline-block"></span>
+              <span>Current Flight Point</span>
+            </div>
+          </div>
+
+          <!-- D3 Curve Container -->
+          <div id="chart-curve" class="relative w-full h-[290px] sm:h-[320px] select-none"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Bottom Row: Penalty Breakdown Chart + Weight vs. Altitude Interactive Heatmap -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Chart 2: Factor Penalty Breakdown -->
+      <section class="lg:col-span-5 bg-cockpit-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <h3 class="text-sm font-semibold text-white">Efficiency Penalty Breakdown</h3>
+            <span class="text-[11px] font-mono text-slate-400">Impact on Score</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-4">
+            Contribution of weight, distance, and altitude penalties reducing efficiency from the airliner's baseline.
+          </p>
+        </div>
+
+        <div id="chart-penalties" class="relative w-full h-[260px]"></div>
+
+        <div id="penalty-insight" class="mt-3 p-3 rounded-xl bg-cockpit-950/80 border border-slate-800/80 text-xs text-slate-300 leading-relaxed">
+          <!-- Dynamically populated insight -->
+        </div>
+      </section>
+
+      <!-- Chart 3: Interactive 2D Heatmap (Weight vs. Altitude) -->
+      <section class="lg:col-span-7 bg-cockpit-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <div>
+            <h3 class="text-sm font-semibold text-white">Weight × Altitude Efficiency Map</h3>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Click or tap any cell to jump directly to that Weight &amp; Altitude combination.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+            <span>Low Eff.</span>
+            <div class="w-24 h-2.5 rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400"></div>
+            <span>High Eff.</span>
+          </div>
+        </div>
+
+        <div id="chart-heatmap" class="relative w-full h-[300px] sm:h-[320px] mt-3 select-none"></div>
+      </section>
+    </div>
+
+    <!-- Pinned Scenarios Comparison Table -->
+    <section class="bg-cockpit-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-sm font-semibold text-white">Pinned Scenario Comparison Log</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Compare Boeing vs. Airbus or test altitude &amp; weight trade-offs side by side</p>
+        </div>
+        <button id="btn-clear-log" class="text-xs font-medium text-slate-400 hover:text-rose-300 px-3 py-1.5 rounded-lg bg-cockpit-950 border border-slate-800 hover:border-rose-500/40 transition">
+          Clear Log
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-800 text-slate-400 font-mono uppercase tracking-wider text-[11px]">
+              <th class="py-2.5 px-3">Airliner</th>
+              <th class="py-2.5 px-3">Weight</th>
+              <th class="py-2.5 px-3">Distance</th>
+              <th class="py-2.5 px-3">Altitude</th>
+              <th class="py-2.5 px-3">Eff. Score</th>
+              <th class="py-2.5 px-3">Spec. Range</th>
+              <th class="py-2.5 px-3">Total Fuel</th>
+              <th class="py-2.5 px-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="scenario-table-body" class="divide-y divide-slate-800/70 font-mono">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Floating Tooltip for D3 Charts -->
+  <div id="d3-tooltip" class="fixed pointer-events-none z-50 opacity-0 transition-opacity duration-150 bg-cockpit-950/95 border border-slate-700 text-slate-100 rounded-xl px-3 py-2 text-xs shadow-2xl backdrop-blur-md"></div>
+
+  <!-- Application Script -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* =========================================================================
+       * 1. SIMULATION CONFIGURATION & AIRLINER PROFILES
+       * ========================================================================= */
+      const RANGES = {
+        weight: { min: 45, max: 260, label: 'Total Weight (t)', unit: 't' },
+        distance: { min: 200, max: 6000, label: 'Flight Distance (NM)', unit: 'NM' },
+        altitude: { min: 10000, max: 43000, label: 'Cruise Altitude (ft)', unit: 'ft' }
+      };
+
+      // Distinct aerodynamic & propulsion profiles for Boeing vs Airbus
+      const AIRLINERS = {
+        boeing: {
+          name: 'Boeing',
+          specLabel: 'B787-Class Profile',
+          color: '#38bdf8', // sky-400
+          note: 'Boeing profile: Higher baseline efficiency on lighter loads, with slightly steeper weight penalty at maximum takeoff weight.',
+          baseScore: 98.5,
+          maxSpecificRange: 215, // NM per metric ton of fuel at ideal minimum load
+          // Penalty weights (higher value = steeper efficiency drop as variable rises)
+          weightPenaltyMax: 36.5,
+          distancePenaltyMax: 23.0,
+          altitudePenaltyMax: 21.5
+        },
+        airbus: {
+          name: 'Airbus',
+          specLabel: 'A350-Class Profile',
+          color: '#34d399', // emerald-400
+          note: 'Airbus profile: More resilient under heavy payloads and high altitudes, with slightly higher distance compounding.',
+          baseScore: 96.5,
+          maxSpecificRange: 210,
+          weightPenaltyMax: 32.0,
+          distancePenaltyMax: 25.5,
+          altitudePenaltyMax: 18.5
+        }
+      };
+
+      // Quick flight presets
+      const PRESETS = {
+        regional: { airliner: 'airbus', weight: 68, distance: 550, altitude: 18000 },
+        transcon: { airliner: 'boeing', weight: 145, distance: 2400, altitude: 31000 },
+        heavy: { airliner: 'boeing', weight: 235, distance: 5200, altitude: 40000 }
+      };
+
+      // Application reactive state
+      const state = {
+        airliner: 'boeing',
+        weight: 120,      // metric tons
+        distance: 1800,   // nautical miles
+        altitude: 28000,  // feet
+        activeAxis: 'weight', // 'weight' | 'distance' | 'altitude'
+        pinnedScenarios: []
+      };
+
+      /* =========================================================================
+       * 2. CORE FUEL EFFICIENCY MODEL
+       *    Guarantees that higher weight, longer distance, and higher altitude
+       *    all monotonically reduce fuel efficiency.
+       * ========================================================================= */
+      function normalize(value, min, max) {
+        return Math.max(0, Math.min(1, (value - min) / (max - min)));
+      }
+
+      function calculateFlightMetrics({ airliner, weight, distance, altitude }) {
+        const profile = AIRLINERS[airliner] || AIRLINERS.boeing;
+
+        // Normalized [0..1] inputs
+        const wNorm = normalize(weight, RANGES.weight.min, RANGES.weight.max);
+        const dNorm = normalize(distance, RANGES.distance.min, RANGES.distance.max);
+        const aNorm = normalize(altitude, RANGES.altitude.min, RANGES.altitude.max);
+
+        // Non-linear monotonic penalties (each increases as its input increases)
+        // Weight: induced drag scales super-linearly with mass
+        const weightPenalty = profile.weightPenaltyMax * Math.pow(wNorm, 1.25);
+
+        // Distance: fuel-to-carry-fuel compounding effect
+        const distancePenalty = profile.distancePenaltyMax * Math.pow(dNorm, 1.15);
+
+        // Altitude: climb energy & high-altitude efficiency penalty (per spec)
+        const altitudePenalty = profile.altitudePenaltyMax * Math.pow(aNorm, 1.3);
+
+        // Interaction penalty when multiple stressors are simultaneously high
+        const interactionPenalty = 4.5 * (wNorm * aNorm + 0.5 * wNorm * dNorm);
+
+        const totalPenalty = weightPenalty + distancePenalty + altitudePenalty + interactionPenalty;
+
+        // Efficiency Score clamped to [8, 100]
+        const efficiencyScore = Math.max(8, Math.min(100, profile.baseScore - totalPenalty));
+
+        // Specific Range (NM per metric ton of fuel) scales directly with efficiency score
+        // Higher score => more NM per ton of fuel (better efficiency)
+        const specificRange = profile.maxSpecificRange * (0.22 + 0.78 * (efficiencyScore / 100));
+
+        // Fuel burn rate (kg per NM) = 1000 / specificRange
+        const burnRateKgPerNM = 1000 / specificRange;
+
+        // Total fuel required (metric tons) = distance / specificRange
+        const totalFuelTons = distance / specificRange;
+
+        // Estimated CO2 emissions (~3.16 tons CO2 per ton of Jet-A1 fuel)
+        const co2Tons = totalFuelTons * 3.16;
+
+        return {
+          airliner,
+          weight,
+          distance,
+          altitude,
+          baseScore: profile.baseScore,
+          efficiencyScore,
+          specificRange,
+          burnRateKgPerNM,
+          totalFuelTons,
+          co2Tons,
+          penalties: {
+            weight: weightPenalty,
+            distance: distancePenalty,
+            altitude: altitudePenalty,
+            interaction: interactionPenalty
+          }
+        };
+      }
+
+      /* =========================================================================
+       * 3. UI HELPERS (Toast, Formatting, Color Scales)
+       * ========================================================================= */
+      function showToast(message) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'pointer-events-auto px-4 py-2.5 rounded-xl bg-cockpit-800 border border-sky-500/40 text-xs font-medium text-slate-100 shadow-xl transition-all duration-300 translate-y-2 opacity-0';
+        toast.textContent = message;
+        container.appendChild(toast);
+
+        requestAnimationFrame(() => {
+          toast.classList.remove('translate-y-2', 'opacity-0');
+        });
+
+        setTimeout(() => {
+          toast.classList.add('opacity-0', 'translate-y-2');
+          setTimeout(() => toast.remove(), 300);
+        }, 2600);
+      }
+
+      function getScoreMeta(score) {
+        if (score >= 75) return { label: 'OPTIMAL', text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', bar: 'bg-emerald-400' };
+        if (score >= 55) return { label: 'MODERATE', text: 'text-sky-300', bg: 'bg-sky-500/15', border: 'border-sky-500/30', bar: 'bg-sky-400' };
+        if (score >= 35) return { label: 'HIGH BURN', text: 'text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/30', bar: 'bg-amber-400' };
+        return { label: 'CRITICAL', text: 'text-rose-300', bg: 'bg-rose-500/15', border: 'border-rose-500/30', bar: 'bg-rose-500' };
+      }
+
+      // Continuous color interpolator for Efficiency Score [10..95]
+      const efficiencyColorScale = d3.scaleLinear()
+        .domain([15, 45, 70, 95])
+        .range(['#f43f5e', '#f59e0b', '#38bdf8', '#34d399'])
+        .clamp(true);
+
+      const tooltipEl = d3.select('#d3-tooltip');
+
+      function showTooltip(event, html) {
+        const padding = 14;
+        tooltipEl.html(html).style('opacity', 1);
+        const node = tooltipEl.node();
+        const rect = node.getBoundingClientRect();
+        let left = event.clientX + padding;
+        let top = event.clientY - rect.height / 2;
+
+        // Keep tooltip within viewport bounds
+        if (left + rect.width > window.innerWidth - 10) {
+          left = event.clientX - rect.width - padding;
+        }
+        if (top < 10) top = 10;
+        if (top + rect.height > window.innerHeight - 10) {
+          top = window.innerHeight - rect.height - 10;
+        }
+
+        tooltipEl.style('left', `${left}px`).style('top', `${top}px`);
+      }
+
+      function hideTooltip() {
+        tooltipEl.style('opacity', 0);
+      }
+
+      /* =========================================================================
+       * 4. D3 CHART 1: MULTI-AIRLINER EFFICIENCY SENSITIVITY CURVE
+       * ========================================================================= */
+      function renderCurveChart() {
+        try {
+          const container = document.getElementById('chart-curve');
+          if (!container) return;
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          if (width < 40 || height < 40) return;
+
+          d3.select(container).selectAll('*').remove();
+
+          const margin = { top: 18, right: 24, bottom: 44, left: 52 };
+          const innerW = width - margin.left - margin.right;
+          const innerH = height - margin.top - margin.bottom;
+
+          const axisKey = state.activeAxis;
+          const axisCfg = RANGES[axisKey];
+
+          // Update subtitle
+          const others = Object.keys(RANGES).filter(k => k !== axisKey).join(' & ');
+          document.getElementById('curve-subtitle').textContent =
+            `Fuel efficiency score as ${axisCfg.label.split(' (')[0]} increases (holding ${others} constant)`;
+
+          // Sample 50 points across the selected X-axis for both Boeing and Airbus
+          const steps = 50;
+          const boeingData = [];
+          const airbusData = [];
+
+          for (let i = 0; i <= steps; i++) {
+            const xVal = axisCfg.min + (i / steps) * (axisCfg.max - axisCfg.min);
+            const paramsBase = {
+              weight: state.weight,
+              distance: state.distance,
+              altitude: state.altitude,
+              [axisKey]: xVal
+            };
+            boeingData.push({ x: xVal, ...calculateFlightMetrics({ ...paramsBase, airliner: 'boeing' }) });
+            airbusData.push({ x: xVal, ...calculateFlightMetrics({ ...paramsBase, airliner: 'airbus' }) });
+          }
+
+          const svg = d3.select(container)
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+          const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+          const xScale = d3.scaleLinear().domain([axisCfg.min, axisCfg.max]).range([0, innerW]);
+          const yScale = d3.scaleLinear().domain([0, 100]).range([innerH, 0]);
+
+          // Horizontal gridlines
+          g.append('g')
+            .attr('class', 'grid')
+            .call(d3.axisLeft(yScale).ticks(5).tickSize(-innerW).tickFormat(''))
+            .call(sel => sel.select('.domain').remove())
+            .call(sel => sel.selectAll('line').attr('stroke', '#1e2d4d').attr('stroke-dasharray', '3,3'));
+
+          // X Axis
+          g.append('g')
+            .attr('transform', `translate(0,${innerH})`)
+            .call(
+              d3.axisBottom(xScale)
+                .ticks(width < 460 ? 4 : 6)
+                .tickFormat(d => axisKey === 'altitude' ? `${(d / 1000).toFixed(0)}k` : d3.format(',')(d))
+            )
+            .call(sel => sel.select('.domain').attr('stroke', '#334155'))
+            .call(sel => sel.selectAll('text').attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-family', 'JetBrains Mono, monospace'));
+
+          // Y Axis
+          g.append('g')
+            .call(d3.axisLeft(yScale).ticks(5).tickFormat(d => `${d}%`))
+            .call(sel => sel.select('.domain').attr('stroke', '#334155'))
+            .call(sel => sel.selectAll('text').attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-family', 'JetBrains Mono, monospace'));
+
+          // Axis Titles
+          g.append('text')
+            .attr('x', innerW / 2)
+            .attr('y', innerH + 36)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#cbd5e1')
+            .attr('font-size', '11px')
+            .text(axisCfg.label);
+
+          g.append('text')
+            .attr('transform', 'rotate(-90)')
+            .attr('x', -innerH / 2)
+            .attr('y', -38)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#cbd5e1')
+            .attr('font-size', '11px')
+            .text('Efficiency Score');
+
+          // Area gradient under active airliner curve
+          const activeColor = AIRLINERS[state.airliner].color;
+          const gradId = 'active-area-grad';
+          const defs = svg.append('defs');
+          const grad = defs.append('linearGradient')
+            .attr('id', gradId)
+            .attr('x1', '0%').attr('y1', '0%')
+            .attr('x2', '0%').attr('y2', '100%');
+          grad.append('stop').attr('offset', '0%').attr('stop-color', activeColor).attr('stop-opacity', 0.25);
+          grad.append('stop').attr('offset', '100%').attr('stop-color', activeColor).attr('stop-opacity', 0.0);
+
+          const areaGen = d3.area()
+            .x(d => xScale(d.x))
+            .y0(innerH)
+            .y1(d => yScale(d.efficiencyScore))
+            .curve(d3.curveMonotoneX);
+
+          const lineGen = d3.line()
+            .x(d => xScale(d.x))
+            .y(d => yScale(d.efficiencyScore))
+            .curve(d3.curveMonotoneX);
+
+          const activeData = state.airliner === 'boeing' ? boeingData : airbusData;
+
+          g.append('path')
+            .datum(activeData)
+            .attr('fill', `url(#${gradId})`)
+            .attr('d', areaGen);
+
+          // Draw Boeing line
+          g.append('path')
+            .datum(boeingData)
+            .attr('fill', 'none')
+            .attr('stroke', AIRLINERS.boeing.color)
+            .attr('stroke-width', state.airliner === 'boeing' ? 3 : 1.8)
+            .attr('stroke-dasharray', state.airliner === 'boeing' ? 'none' : '5,4')
+            .attr('opacity', state.airliner === 'boeing' ? 1 : 0.65)
+            .attr('d', lineGen);
+
+          // Draw Airbus line
+          g.append('path')
+            .datum(airbusData)
+            .attr('fill', 'none')
+            .attr('stroke', AIRLINERS.airbus.color)
+            .attr('stroke-width', state.airliner === 'airbus' ? 3 : 1.8)
+            .attr('stroke-dasharray', state.airliner === 'airbus' ? 'none' : '5,4')
+            .attr('opacity', state.airliner === 'airbus' ? 1 : 0.65)
+            .attr('d', lineGen);
+
+          // Current flight point vertical marker & dot
+          const currentMetrics = calculateFlightMetrics(state);
+          const curX = xScale(state[axisKey]);
+          const curY = yScale(currentMetrics.efficiencyScore);
+
+          g.append('line')
+            .attr('x1', curX).attr('x2', curX)
+            .attr('y1', 0).attr('y2', innerH)
+            .attr('stroke', '#fbbf24')
+            .attr('stroke-width', 1.2)
+            .attr('stroke-dasharray', '3,3')
+            .attr('opacity', 0.7);
+
+          g.append('circle')
+            .attr('cx', curX)
+            .attr('cy', curY)
+            .attr('r', 6)
+            .attr('fill', '#fbbf24')
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', 2);
+
+          // Interactive hover overlay
+          const hoverLine = g.append('line')
+            .attr('y1', 0).attr('y2', innerH)
+            .attr('stroke', '#94a3b8')
+            .attr('stroke-width', 1)
+            .style('opacity', 0);
+
+          const hoverDotB = g.append('circle').attr('r', 4.5).attr('fill', AIRLINERS.boeing.color).attr('stroke', '#0d1424').attr('stroke-width', 1.5).style('opacity', 0);
+          const hoverDotA = g.append('circle').attr('r', 4.5).attr('fill', AIRLINERS.airbus.color).attr('stroke', '#0d1424').attr('stroke-width', 1.5).style('opacity', 0);
+
+          const bisect = d3.bisector(d => d.x).left;
+
+          g.append('rect')
+            .attr('width', innerW)
+            .attr('height', innerH)
+            .attr('fill', 'transparent')
+            .style('cursor', 'crosshair')
+            .on('mousemove touchmove', function (event) {
+              const [mx] = d3.pointer(event, this);
+              const xVal = xScale.invert(Math.max(0, Math.min(innerW, mx)));
+              const idx = Math.min(boeingData.length - 1, Math.max(0, bisect(boeingData, xVal)));
+              const dB = boeingData[idx];
+              const dA = airbusData[idx];
+              const px = xScale(dB.x);
+
+              hoverLine.attr('x1', px).attr('x2', px).style('opacity', 0.8);
+              hoverDotB.attr('cx', px).attr('cy', yScale(dB.efficiencyScore)).style('opacity', 1);
+              hoverDotA.attr('cx', px).attr('cy', yScale(dA.efficiencyScore)).style('opacity', 1);
+
+              const formattedX = axisKey === 'altitude'
+                ? `${Math.round(dB.x).toLocaleString()} ft`
+                : `${Math.round(dB.x).toLocaleString()} ${axisCfg.unit}`;
+
+              showTooltip(event, `
+                <div class="font-mono space-y-1">
+                  <div class="text-slate-400 border-b border-slate-700 pb-1 mb-1">${axisCfg.label.split(' (')[0]}: <span class="text-white font-semibold">${formattedX}</span></div>
+                  <div class="flex items-center justify-between gap-4">
+                    <span class="text-sky-400">Boeing:</span>
+                    <span class="font-semibold">${dB.efficiencyScore.toFixed(1)}% <span class="text-slate-400 font-normal">(${dB.specificRange.toFixed(0)} NM/t)</span></span>
+                  </div>
+                  <div class="flex items-center justify-between gap-4">
+                    <span class="text-emerald-400">Airbus:</span>
+                    <span class="font-semibold">${dA.efficiencyScore.toFixed(1)}% <span class="text-slate-400 font-normal">(${dA.specificRange.toFixed(0)} NM/t)</span></span>
+                  </div>
+                </div>
+              `);
+            })
+            .on('mouseleave touchend', () => {
+              hoverLine.style('opacity', 0);
+              hoverDotB.style('opacity', 0);
+              hoverDotA.style('opacity', 0);
+              hideTooltip();
+            });
+        } catch (err) {
+          console.error('Error rendering curve chart:', err);
+        }
+      }
+
+      /* =========================================================================
+       * 5. D3 CHART 2: EFFICIENCY PENALTY BREAKDOWN (HORIZONTAL BAR CHART)
+       * ========================================================================= */
+      function renderPenaltyChart(metrics) {
+        try {
+          const container = document.getElementById('chart-penalties');
+          if (!container) return;
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          if (width < 40 || height < 40) return;
+
+          d3.select(container).selectAll('*').remove();
+
+          const data = [
+            { key: 'Weight', value: metrics.penalties.weight, color: '#f43f5e', desc: `${state.weight} t payload & aircraft mass` },
+            { key: 'Distance', value: metrics.penalties.distance, color: '#f59e0b', desc: `${state.distance.toLocaleString()} NM fuel-carry compounding` },
+            { key: 'Altitude', value: metrics.penalties.altitude, color: '#a855f7', desc: `${state.altitude.toLocaleString()} ft altitude penalty` },
+            { key: 'Combined', value: metrics.penalties.interaction, color: '#64748b', desc: 'Compound stress (weight × alt/dist)' }
+          ];
+
+          const margin = { top: 10, right: 56, bottom: 26, left: 78 };
+          const innerW = width - margin.left - margin.right;
+          const innerH = height - margin.top - margin.bottom;
+
+          const svg = d3.select(container)
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+          const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+          const maxVal = Math.max(40, d3.max(data, d => d.value) * 1.15);
+          const xScale = d3.scaleLinear().domain([0, maxVal]).range([0, innerW]);
+          const yScale = d3.scaleBand().domain(data.map(d => d.key)).range([0, innerH]).padding(0.32);
+
+          // Gridlines
+          g.append('g')
+            .call(d3.axisBottom(xScale).ticks(4).tickSize(innerH).tickFormat(''))
+            .call(sel => sel.select('.domain').remove())
+            .call(sel => sel.selectAll('line').attr('stroke', '#1e2d4d').attr('stroke-dasharray', '3,3'));
+
+          // X axis
+          g.append('g')
+            .attr('transform', `translate(0,${innerH})`)
+            .call(d3.axisBottom(xScale).ticks(4).tickFormat(d => `-${d} pts`))
+            .call(sel => sel.select('.domain').attr('stroke', '#334155'))
+            .call(sel => sel.selectAll('text').attr('fill', '#94a3b8').attr('font-size', '10px').attr('font-family', 'JetBrains Mono, monospace'));
+
+          // Y axis
+          g.append('g')
+            .call(d3.axisLeft(yScale).tickSize(0))
+            .call(sel => sel.select('.domain').remove())
+            .call(sel => sel.selectAll('text').attr('fill', '#e2e8f0').attr('font-size', '11px').attr('font-weight', '500').attr('dx', '-6'));
+
+          // Background tracks
+          g.selectAll('.bar-bg')
+            .data(data)
+            .enter()
+            .append('rect')
+            .attr('x', 0)
+            .attr('y', d => yScale(d.key))
+            .attr('width', innerW)
+            .attr('height', yScale.bandwidth())
+            .attr('rx', 6)
+            .attr('fill', '#070b14');
+
+          // Foreground bars
+          g.selectAll('.bar')
+            .data(data)
+            .enter()
+            .append('rect')
+            .attr('x', 0)
+            .attr('y', d => yScale(d.key))
+            .attr('width', d => Math.max(2, xScale(d.value)))
+            .attr('height', yScale.bandwidth())
+            .attr('rx', 6)
+            .attr('fill', d => d.color)
+            .style('cursor', 'pointer')
+            .on('mousemove', (event, d) => {
+              showTooltip(event, `
+                <div class="font-mono">
+                  <div class="font-semibold text-white">${d.key} Penalty: -${d.value.toFixed(1)} pts</div>
+                  <div class="text-slate-400 mt-0.5 font-sans">${d.desc}</div>
+                </div>
+              `);
+            })
+            .on('mouseleave', hideTooltip);
+
+          // Value labels
+          g.selectAll('.val-label')
+            .data(data)
+            .enter()
+            .append('text')
+            .attr('x', d => xScale(d.value) + 8)
+            .attr('y', d => yScale(d.key) + yScale.bandwidth() / 2 + 4)
+            .attr('fill', '#cbd5e1')
+            .attr('font-size', '11px')
+            .attr('font-family', 'JetBrains Mono, monospace')
+            .text(d => `-${d.value.toFixed(1)}`);
+
+          // Update text insight below chart
+          const topFactor = data.slice(0, 3).sort((a, b) => b.value - a.value)[0];
+          const insightEl = document.getElementById('penalty-insight');
+          if (topFactor.value < 1) {
+            insightEl.innerHTML = `<span class="text-emerald-300 font-semibold">Near-Optimal Load:</span> Minimal penalties across weight, distance, and altitude for this ${AIRLINERS[state.airliner].name} flight.`;
+          } else {
+            insightEl.innerHTML = `<span class="text-amber-300 font-semibold">Primary Drag Factor:</span> <span class="text-white font-medium">${topFactor.key}</span> is currently the largest source of efficiency loss (<span class="font-mono text-rose-300">-${topFactor.value.toFixed(1)} pts</span>). Reducing ${topFactor.key.toLowerCase()} yields the fastest efficiency gain.`;
+          }
+        } catch (err) {
+          console.error('Error rendering penalty chart:', err);
+        }
+      }
+
+      /* =========================================================================
+       * 6. D3 CHART 3: INTERACTIVE 2D HEATMAP (WEIGHT × ALTITUDE)
+       * ========================================================================= */
+      function renderHeatmap() {
+        try {
+          const container = document.getElementById('chart-heatmap');
+          if (!container) return;
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          if (width < 40 || height < 40) return;
+
+          d3.select(container).selectAll('*').remove();
+
+          const margin = { top: 10, right: 16, bottom: 42, left: 56 };
+          const innerW = width - margin.left - margin.right;
+          const innerH = height - margin.top - margin.bottom;
+
+          const cols = 14; // Weight bins
+          const rows = 10; // Altitude bins
+
+          const weights = d3.range(cols).map(i =>
+            Math.round(RANGES.weight.min + (i / (cols - 1)) * (RANGES.weight.max - RANGES.weight.min))
+          );
+          const altitudes = d3.range(rows).map(j =>
+            Math.round((RANGES.altitude.min + (j / (rows - 1)) * (RANGES.altitude.max - RANGES.altitude.min)) / 500) * 500
+          );
+
+          const cells = [];
+          for (let j = 0; j < rows; j++) {
+            for (let i = 0; i < cols; i++) {
+              const m = calculateFlightMetrics({
+                airliner: state.airliner,
+                weight: weights[i],
+                distance: state.distance,
+                altitude: altitudes[j]
+              });
+              cells.push({
+                w: weights[i],
+                a: altitudes[j],
+                score: m.efficiencyScore,
+                range: m.specificRange
+              });
+            }
+          }
+
+          const svg = d3.select(container)
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+          const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+          const xBand = d3.scaleBand().domain(weights).range([0, innerW]).padding(0.06);
+          const yBand = d3.scaleBand().domain(altitudes).range([innerH, 0]).padding(0.06);
+
+          // Linear scales for exact reticle placement
+          const xLin = d3.scaleLinear().domain([RANGES.weight.min, RANGES.weight.max]).range([0, innerW]);
+          const yLin = d3.scaleLinear().domain([RANGES.altitude.min, RANGES.altitude.max]).range([innerH, 0]);
+
+          // Heatmap cells
+          g.selectAll('.heat-cell')
+            .data(cells)
+            .enter()
+            .append('rect')
+            .attr('x', d => xBand(d.w))
+            .attr('y', d => yBand(d.a))
+            .attr('width', xBand.bandwidth())
+            .attr('height', yBand.bandwidth())
+            .attr('rx', 4)
+            .attr('fill', d => efficiencyColorScale(d.score))
+            .attr('opacity', 0.88)
+            .style('cursor', 'pointer')
+            .on('mousemove', function (event, d) {
+              d3.select(this).attr('stroke', '#ffffff').attr('stroke-width', 1.5).attr('opacity', 1);
+              showTooltip(event, `
+                <div class="font-mono space-y-0.5">
+                  <div class="text-white font-semibold">Score: ${d.score.toFixed(1)}% (${d.range.toFixed(0)} NM/t)</div>
+                  <div class="text-slate-300">Weight: ${d.w} t &bull; Alt: ${d.a.toLocaleString()} ft</div>
+                  <div class="text-[10px] text-sky-400 font-sans pt-0.5">Click to apply these values</div>
+                </div>
+              `);
+            })
+            .on('mouseleave', function () {
+              d3.select(this).attr('stroke', 'none').attr('opacity', 0.88);
+              hideTooltip();
+            })
+            .on('click', (event, d) => {
+              state.weight = d.w;
+              state.altitude = d.a;
+              syncInputsFromState();
+              updateAll();
+              showToast(`Updated to ${d.w} t at ${d.a.toLocaleString()} ft`);
+            });
+
+          // X Axis (show every 3rd tick for legibility)
+          g.append('g')
+            .attr('transform', `translate(0,${innerH})`)
+            .call(d3.axisBottom(xBand).tickValues(weights.filter((_, i) => i % 3 === 0 || i === weights.length - 1)).tickFormat(d => `${d}t`))
+            .call(sel => sel.select('.domain').remove())
+            .call(sel => sel.selectAll('text').attr('fill', '#94a3b8').attr('font-size', '10px').attr('font-family', 'JetBrains Mono, monospace'));
+
+          // Y Axis
+          g.append('g')
+            .call(d3.axisLeft(yBand).tickValues(altitudes.filter((_, j) => j % 2 === 0 || j === altitudes.length - 1)).tickFormat(d => `${(d / 1000).toFixed(0)}k`))
+            .call(sel => sel.select('.domain').remove())
+            .call(sel => sel.selectAll('text').attr('fill', '#94a3b8').attr('font-size', '10px').attr('font-family', 'JetBrains Mono, monospace'));
+
+          // Axis Titles
+          g.append('text')
+            .attr('x', innerW / 2)
+            .attr('y', innerH + 34)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#cbd5e1')
+            .attr('font-size', '11px')
+            .text('Total Weight (metric tons)');
+
+          g.append('text')
+            .attr('transform', 'rotate(-90)')
+            .attr('x', -innerH / 2)
+            .attr('y', -40)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#cbd5e1')
+            .attr('font-size', '11px')
+            .text('Altitude (ft)');
+
+          // Live Reticle for current (weight, altitude)
+          const rx = xLin(state.weight);
+          const ry = yLin(state.altitude);
+
+          const reticle = g.append('g').style('pointer-events', 'none');
+          reticle.append('circle')
+            .attr('cx', rx).attr('cy', ry)
+            .attr('r', 10)
+            .attr('fill', 'none')
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '3,2');
+
+          reticle.append('circle')
+            .attr('cx', rx).attr('cy', ry)
+            .attr('r', 3.5)
+            .attr('fill', '#070b14')
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', 2);
+        } catch (err) {
+          console.error('Error rendering heatmap:', err);
+        }
+      }
+
+      /* =========================================================================
+       * 7. SCENARIO COMPARISON LOG TABLE
+       * ========================================================================= */
+      function renderScenarioTable() {
+        const tbody = document.getElementById('scenario-table-body');
+        if (!state.pinnedScenarios.length) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="py-6 text-center text-slate-500 font-sans">
+                No pinned scenarios yet. Adjust the sliders and click <span class="text-sky-400 font-medium">"Pin Scenario to Comparison Log"</span> to compare configurations.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = state.pinnedScenarios.map((item, idx) => {
+          const meta = getScoreMeta(item.efficiencyScore);
+          const brandColor = item.airliner === 'boeing' ? 'text-sky-300' : 'text-emerald-300';
+          return `
+            <tr class="hover:bg-cockpit-800/50 transition">
+              <td class="py-2.5 px-3 font-sans font-semibold ${brandColor}">${AIRLINERS[item.airliner].name}</td>
+              <td class="py-2.5 px-3 text-slate-200">${item.weight} t</td>
+              <td class="py-2.5 px-3 text-slate-200">${item.distance.toLocaleString()} NM</td>
+              <td class="py-2.5 px-3 text-slate-200">${item.altitude.toLocaleString()} ft</td>
+              <td class="py-2.5 px-3">
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.bg} ${meta.text} border ${meta.border}">
+                  ${item.efficiencyScore.toFixed(1)}%
+                </span>
+              </td>
+              <td class="py-2.5 px-3 text-sky-300">${item.specificRange.toFixed(1)} NM/t</td>
+              <td class="py-2.5 px-3 text-rose-300">${item.totalFuelTons.toFixed(1)} t</td>
+              <td class="py-2.5 px-3 text-right">
+                <button data-load-idx="${idx}" class="text-sky-400 hover:text-sky-300 mr-3 font-sans font-medium">Load</button>
+                <button data-del-idx="${idx}" class="text-slate-500 hover:text-rose-400 font-sans">Remove</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        // Wire row actions
+        tbody.querySelectorAll('[data-load-idx]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const s = state.pinnedScenarios[Number(btn.dataset.loadIdx)];
+            if (!s) return;
+            state.airliner = s.airliner;
+            state.weight = s.weight;
+            state.distance = s.distance;
+            state.altitude = s.altitude;
+            syncInputsFromState();
+            updateAll();
+            showToast(`Loaded ${AIRLINERS[s.airliner].name} scenario`);
+          });
+        });
+
+        tbody.querySelectorAll('[data-del-idx]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.pinnedScenarios.splice(Number(btn.dataset.delIdx), 1);
+            renderScenarioTable();
+          });
+        });
+      }
+
+      /* =========================================================================
+       * 8. MASTER UPDATE & DOM SYNCHRONIZATION
+       * ========================================================================= */
+      function syncInputsFromState() {
+        document.getElementById('input-weight').value = state.weight;
+        document.getElementById('input-distance').value = state.distance;
+        document.getElementById('input-altitude').value = state.altitude;
+
+        // Airliner toggle buttons
+        const btnBoeing = document.getElementById('btn-boeing');
+        const btnAirbus = document.getElementById('btn-airbus');
+
+        if (state.airliner === 'boeing') {
+          btnBoeing.className = 'airliner-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow-sm';
+          btnAirbus.className = 'airliner-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200 border border-transparent';
+        } else {
+          btnAirbus.className = 'airliner-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-sm';
+          btnBoeing.className = 'airliner-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200 border border-transparent';
+        }
+
+        document.getElementById('airliner-spec-label').textContent = AIRLINERS[state.airliner].specLabel;
+        document.getElementById('airliner-note').textContent = AIRLINERS[state.airliner].note;
+      }
+
+      function updateAll() {
+        // Update slider value readouts
+        document.getElementById('val-weight').textContent = state.weight.toLocaleString();
+        document.getElementById('val-distance').textContent = state.distance.toLocaleString();
+        document.getElementById('val-altitude').textContent = state.altitude.toLocaleString();
+
+        // Compute flight metrics
+        const metrics = calculateFlightMetrics(state);
+        const scoreMeta = getScoreMeta(metrics.efficiencyScore);
+
+        // Update KPIs
+        document.getElementById('kpi-score').textContent = metrics.efficiencyScore.toFixed(1);
+        const badge = document.getElementById('kpi-badge');
+        badge.textContent = scoreMeta.label;
+        badge.className = `text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border ${scoreMeta.bg} ${scoreMeta.text} ${scoreMeta.border}`;
+
+        const bar = document.getElementById('kpi-score-bar');
+        bar.style.width = `${metrics.efficiencyScore}%`;
+        bar.className = `h-full rounded-full transition-all duration-300 ${scoreMeta.bar}`;
+
+        document.getElementById('kpi-range').textContent = metrics.specificRange.toFixed(1);
+        document.getElementById('kpi-burn-rate').textContent = metrics.burnRateKgPerNM.toFixed(2);
+        document.getElementById('kpi-total-fuel').textContent = metrics.totalFuelTons.toFixed(1);
+        document.getElementById('kpi-co2').textContent = `${metrics.co2Tons.toFixed(1)} t`;
+
+        // Redraw all 3 D3 visualizations
+        renderCurveChart();
+        renderPenaltyChart(metrics);
+        renderHeatmap();
+      }
+
+      /* =========================================================================
+       * 9. EVENT LISTENERS & INITIALIZATION
+       * ========================================================================= */
+      function initEvents() {
+        // Sliders
+        document.getElementById('input-weight').addEventListener('input', e => {
+          state.weight = Number(e.target.value);
+          updateAll();
+        });
+        document.getElementById('input-distance').addEventListener('input', e => {
+          state.distance = Number(e.target.value);
+          updateAll();
+        });
+        document.getElementById('input-altitude').addEventListener('input', e => {
+          state.altitude = Number(e.target.value);
+          updateAll();
+        });
+
+        // Airliner buttons
+        document.getElementById('btn-boeing').addEventListener('click', () => {
+          state.airliner = 'boeing';
+          syncInputsFromState();
+          updateAll();
+        });
+        document.getElementById('btn-airbus').addEventListener('click', () => {
+          state.airliner = 'airbus';
+          syncInputsFromState();
+          updateAll();
+        });
+
+        // Axis switcher buttons
+        document.querySelectorAll('.axis-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.activeAxis = btn.dataset.axis;
+            document.querySelectorAll('.axis-btn').forEach(b => {
+              b.className = 'axis-btn px-3 py-1.5 text-xs font-medium rounded-lg text-slate-400 hover:text-slate-200 transition';
+            });
+            btn.className = 'axis-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-500/20 text-sky-300 transition';
+            renderCurveChart();
+          });
+        });
+
+        // Presets
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const p = PRESETS[btn.dataset.preset];
+            if (!p) return;
+            Object.assign(state, p);
+            syncInputsFromState();
+            updateAll();
+            showToast(`Applied "${btn.textContent.trim()}" preset`);
+          });
+        });
+
+        // Reset button
+        document.getElementById('btn-reset').addEventListener('click', () => {
+          state.airliner = 'boeing';
+          state.weight = 120;
+          state.distance = 1800;
+          state.altitude = 28000;
+          syncInputsFromState();
+          updateAll();
+          showToast('Reset parameters to default flight');
+        });
+
+        // Pin Scenario button
+        document.getElementById('btn-pin').addEventListener('click', () => {
+          const metrics = calculateFlightMetrics(state);
+          state.pinnedScenarios.unshift(metrics);
+          if (state.pinnedScenarios.length > 8) state.pinnedScenarios.pop();
+          renderScenarioTable();
+          showToast(`Pinned ${AIRLINERS[state.airliner].name} flight (${metrics.efficiencyScore.toFixed(1)}% eff.)`);
+        });
+
+        // Clear Log button
+        document.getElementById('btn-clear-log').addEventListener('click', () => {
+          state.pinnedScenarios = [];
+          renderScenarioTable();
+          showToast('Cleared comparison log');
+        });
+
+        // Debounced resize handler so D3 charts adapt fluidly to any viewport
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(() => {
+            updateAll();
+          }, 120);
+        });
+      }
+
+      // Seed two initial comparison entries so the table is immediately useful
+      function seedInitialLog() {
+        state.pinnedScenarios.push(
+          calculateFlightMetrics({ airliner: 'boeing', weight: 120, distance: 1800, altitude: 28000 }),
+          calculateFlightMetrics({ airliner: 'airbus', weight: 120, distance: 1800, altitude: 28000 })
+        );
+      }
+
+      window.addEventListener('DOMContentLoaded', () => {
+        initEvents();
+        seedInitialLog();
+        syncInputsFromState();
+        renderScenarioTable();
+        updateAll();
+      });
+    })();
+  </script>
+</body>
+</html>
